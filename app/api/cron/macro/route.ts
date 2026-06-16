@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
       return {
         id: `macro-${item.country ?? "XX"}-${item.event?.replace(/\s+/g, "-")}-${item.time}`,
         date: dateStr,
-        time_utc: item.time,
+        time_utc: item.time ? String(item.time).slice(11, 19) || null : null,
         category: "commodities" as const,
         event_type: "macro",
         symbol: null,

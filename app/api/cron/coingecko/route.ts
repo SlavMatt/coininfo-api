@@ -7,48 +7,47 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  // CoinGecko free API: recently added coins (last 200)
-  const url = "https://api.coingecko.com/api/v3/coins/list/new";
-  const res = await fetch(url, {
+  // Use trending coins (free, no auth) + low-cap markets as proxy for new listings
+  const trendingRes = await fetch("https://api.coingecko.com/api/v3/search/trending", {
     headers: { Accept: "application/json" },
   });
-  if (!res.ok) {
-    return NextResponse.json({ error: "coingecko error", status: res.status }, { status: 502 });
+  if (!trendingRes.ok) {
+    return NextResponse.json({ error: "coingecko error", status: trendingRes.status }, { status: 502 });
   }
 
-  const items: any[] = await res.json();
+  const trendingJson = await trendingRes.json();
+  const trendingCoins: any[] = trendingJson?.coins ?? [];
   const today = new Date().toISOString().slice(0, 10);
 
-  const rows = items.slice(0, 50).map((item) => {
-    const activatedAt: string | null = item.activated_at
-      ? new Date(item.activated_at * 1000).toISOString().slice(0, 10)
-      : today;
-
+  const rows = trendingCoins.map((entry: any) => {
+    const coin = entry.item ?? entry;
     return {
-      id: `coingecko-listing-${item.id}-${activatedAt}`,
-      date: activatedAt,
-      time_utc: item.activated_at ? new Date(item.activated_at * 1000).toISOString() : null,
+      id: `coingecko-trending-${coin.id}-${today}`,
+      date: today,
+      time_utc: null,
       category: "crypto" as const,
-      event_type: "new_listing",
-      symbol: item.symbol?.toUpperCase() ?? null,
-      title: `${item.name ?? item.symbol} Listed on CoinGecko`,
+      event_type: "trending",
+      symbol: coin.symbol?.toUpperCase() ?? null,
+      title: `${coin.name ?? coin.symbol} Trending`,
       country: null,
       impact: "low" as const,
-      actual: null,
+      actual: coin.data?.price_change_percentage_24h?.usd != null
+        ? String(coin.data.price_change_percentage_24h.usd.toFixed(2))
+        : null,
       forecast: null,
       prior: null,
-      unit: null,
-      detail: null,
-      source_url: `https://www.coingecko.com/en/coins/${item.id}`,
+      unit: "%",
+      detail: coin.data?.market_cap ?? null,
+      source_url: `https://www.coingecko.com/en/coins/${coin.id}`,
       timing: null,
       eps_surprise: null,
       revenue_actual: null,
       revenue_forecast: null,
       exchange: "CoinGecko",
-      price_range: null,
+      price_range: coin.data?.price != null ? String(coin.data.price) : null,
       raise_usd: null,
       ipo_status: null,
-      underlying: item.symbol?.toUpperCase() ?? null,
+      underlying: coin.symbol?.toUpperCase() ?? null,
       oi_usd: null,
       max_pain: null,
       net_flow_usd: null,

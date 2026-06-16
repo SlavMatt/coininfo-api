@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
   const row = {
     id: `energy-eia-crude-${latest.period}`,
     date: releaseDate,
-    time_utc: `${releaseDate}T14:30:00Z`,
+    time_utc: "14:30:00",
     category: "commodities" as const,
     event_type: "energy",
     symbol: "WTI",

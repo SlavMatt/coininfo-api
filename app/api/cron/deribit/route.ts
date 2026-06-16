@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
       rows.push({
         id: `deribit-options-${underlying}-${date}`,
         date,
-        time_utc: `${date}T08:00:00Z`,
+        time_utc: "08:00:00",
         category: "crypto" as const,
         event_type: "options_expiry",
         symbol: underlying,

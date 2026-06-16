@@ -7,7 +7,6 @@
     { "path": "/api/cron/macro",     "schedule": "0 5 * * 1"    },
     { "path": "/api/cron/energy",    "schedule": "30 15 * * 3"  },
     { "path": "/api/cron/deribit",   "schedule": "0 0 * * 0"    },
-    { "path": "/api/cron/coinglass", "schedule": "0 22 * * 1-5" },
     { "path": "/api/cron/coingecko", "schedule": "0 9 * * *"    }
   ]
 }

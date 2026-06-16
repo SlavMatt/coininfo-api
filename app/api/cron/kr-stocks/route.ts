@@ -1,49 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
-// Platform Korean stocks: Yahoo Finance ticker → internal symbol
+// Platform Korean stocks: Alpha Vantage symbol → internal symbol
 const KR_STOCKS = [
-  { yf: "000660.KS", symbol: "SKHYNIX", name: "SK Hynix",             country: "KR" },
-  { yf: "005930.KS", symbol: "SAMSUNG", name: "Samsung Electronics",  country: "KR" },
+  { av: "000660.KS", symbol: "SKHYNIX", name: "SK Hynix",            country: "KR" },
+  { av: "005930.KS", symbol: "SAMSUNG", name: "Samsung Electronics", country: "KR" },
 ];
 
-interface YFEarnings {
-  date: string;
-  forecast: string | null;
-  forecastHigh: string | null;
-  forecastLow: string | null;
-  revenueForecast: string | null;
-}
-
-async function fetchYFCalendar(yfSymbol: string): Promise<YFEarnings[]> {
-  const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(yfSymbol)}?modules=calendarEvents`;
-  try {
-    const res = await fetch(url, {
-      headers: { "Accept": "application/json", "User-Agent": "Mozilla/5.0" },
-    });
-    if (!res.ok) return [];
-    const json = await res.json();
-    const cal = json?.quoteSummary?.result?.[0]?.calendarEvents;
-    if (!cal?.earnings?.earningsDate?.length) return [];
-
-    return cal.earnings.earningsDate.map((d: { fmt?: string }) => ({
-      date: d.fmt ?? "",
-      forecast: cal.earnings.earningsAverage?.raw != null
-        ? String(cal.earnings.earningsAverage.raw)
-        : null,
-      forecastHigh: cal.earnings.earningsHigh?.raw != null
-        ? String(cal.earnings.earningsHigh.raw)
-        : null,
-      forecastLow: cal.earnings.earningsLow?.raw != null
-        ? String(cal.earnings.earningsLow.raw)
-        : null,
-      revenueForecast: cal.earnings.revenueAverage?.raw != null
-        ? String(cal.earnings.revenueAverage.raw)
-        : null,
-    })).filter((e: YFEarnings) => e.date && e.date.length === 10);
-  } catch {
-    return [];
-  }
+// Parse Alpha Vantage EARNINGS_CALENDAR CSV response
+function parseEarningsCSV(csv: string): { date: string; estimate: string | null }[] {
+  const lines = csv.trim().split("\n");
+  if (lines.length < 2) return [];
+  // header: symbol,name,reportDate,fiscalDateEnding,estimate,currency,timeOfTheDay
+  return lines.slice(1).flatMap((line) => {
+    const cols = line.split(",");
+    if (cols.length < 5) return [];
+    const date = cols[2]?.trim();
+    const estimate = cols[4]?.trim() || null;
+    if (!date || date.length !== 10) return [];
+    return [{ date, estimate: estimate === "None" || estimate === "" ? null : estimate }];
+  });
 }
 
 export async function GET(req: NextRequest) {
@@ -52,53 +28,63 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const rows: unknown[] = [];
+  const apiKey = process.env.ALPHA_VANTAGE_KEY;
+  if (!apiKey) {
+    return NextResponse.json({ error: "ALPHA_VANTAGE_KEY not configured", upserted: 0 }, { status: 503 });
+  }
+
   const today = new Date().toISOString().slice(0, 10);
+  const rows: unknown[] = [];
 
   for (const stock of KR_STOCKS) {
-    const earnings = await fetchYFCalendar(stock.yf);
+    try {
+      const url = `https://www.alphavantage.co/query?function=EARNINGS_CALENDAR&symbol=${encodeURIComponent(stock.av)}&horizon=3month&apikey=${apiKey}`;
+      const res = await fetch(url, { headers: { Accept: "text/csv" } });
+      if (!res.ok) { await new Promise((r) => setTimeout(r, 1000)); continue; }
 
-    for (const e of earnings) {
-      if (e.date < today.slice(0, 7) + "-01") continue; // skip if before this month
-      rows.push({
-        id: `kr-earnings-${stock.symbol}-${e.date}`,
-        date: e.date,
-        time_utc: null,
-        category: "stock" as const,
-        event_type: "earnings",
-        symbol: stock.symbol,
-        title: stock.name,
-        country: stock.country,
-        impact: "high" as const,
-        actual: null,
-        forecast: e.forecast,
-        prior: null,
-        unit: "KRW",
-        detail: e.revenueForecast
-          ? `${stock.name} quarterly earnings. Consensus EPS: ${e.forecast ?? "TBD"} KRW. Revenue est.: ${e.revenueForecast} KRW.`
-          : `${stock.name} quarterly earnings. Consensus EPS: ${e.forecast ?? "TBD"} KRW/share.`,
-        source_url: `https://finance.yahoo.com/quote/${encodeURIComponent(stock.yf)}/financials/`,
-        timing: null,
-        eps_surprise: null,
-        revenue_actual: null,
-        revenue_forecast: e.revenueForecast,
-        exchange: "KRX",
-        price_range: null,
-        raise_usd: null,
-        ipo_status: null,
-        underlying: null,
-        oi_usd: null,
-        max_pain: null,
-        net_flow_usd: null,
-        source: "yahoo-finance",
-      });
+      const csv = await res.text();
+      const entries = parseEarningsCSV(csv).filter((e) => e.date >= today);
+
+      for (const e of entries) {
+        rows.push({
+          id: `kr-earnings-${stock.symbol}-${e.date}`,
+          date: e.date,
+          time_utc: null,
+          category: "stock" as const,
+          event_type: "earnings",
+          symbol: stock.symbol,
+          title: stock.name,
+          country: stock.country,
+          impact: "high" as const,
+          actual: null,
+          forecast: e.estimate,
+          prior: null,
+          unit: "KRW",
+          detail: `${stock.name} quarterly earnings. EPS consensus: ${e.estimate ?? "TBD"} KRW.`,
+          source_url: `https://finance.yahoo.com/quote/${encodeURIComponent(stock.av)}/financials/`,
+          timing: null,
+          eps_surprise: null,
+          revenue_actual: null,
+          revenue_forecast: null,
+          exchange: "KRX",
+          price_range: null,
+          raise_usd: null,
+          ipo_status: null,
+          underlying: null,
+          oi_usd: null,
+          max_pain: null,
+          net_flow_usd: null,
+          source: "alpha-vantage",
+        });
+      }
+    } catch {
+      // continue to next stock
     }
-
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await new Promise((r) => setTimeout(r, 13000)); // Alpha Vantage free: 5 req/min
   }
 
   if (rows.length === 0) {
-    return NextResponse.json({ upserted: 0, note: "no KR earnings dates from Yahoo Finance" });
+    return NextResponse.json({ upserted: 0, note: "no upcoming KR earnings dates" });
   }
 
   const { error } = await db.from("calendar_events").upsert(rows as any[], { onConflict: "id" });

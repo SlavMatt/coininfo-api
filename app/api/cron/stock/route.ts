@@ -7,15 +7,11 @@ const PLATFORM_STOCKS = new Set([
   "AAPL", "AMZN", "GOOGL", "META", "MSTR", "MSFT", "NVDA", "SPCX",
 ]);
 
-function getWeekRange(): { from: string; to: string } {
+function getRange(): { from: string; to: string } {
   const now = new Date();
-  const day = now.getUTCDay();
-  const mon = new Date(now);
-  mon.setUTCDate(now.getUTCDate() - ((day + 6) % 7));
-  const fri = new Date(mon);
-  fri.setUTCDate(mon.getUTCDate() + 4);
-  const fmt = (d: Date) => d.toISOString().slice(0, 10);
-  return { from: fmt(mon), to: fmt(fri) };
+  const from = now.toISOString().slice(0, 10);
+  const to = new Date(now.getTime() + 90 * 86400000).toISOString().slice(0, 10);
+  return { from, to };
 }
 
 export async function GET(req: NextRequest) {
@@ -24,7 +20,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const { from, to } = getWeekRange();
+  const { from, to } = getRange();
   const url = `https://finnhub.io/api/v1/calendar/earnings?from=${from}&to=${to}&token=${process.env.FINNHUB_API_KEY}`;
   const res = await fetch(url);
   if (!res.ok) {

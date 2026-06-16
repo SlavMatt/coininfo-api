@@ -9,10 +9,8 @@ const DIVIDEND_SYMBOLS = [
 
 function getMonthRange(): { from: string; to: string } {
   const now = new Date();
-  const y = now.getUTCFullYear();
-  const m = now.getUTCMonth();
-  const from = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
-  const to = new Date(Date.UTC(y, m + 1, 0)).toISOString().slice(0, 10);
+  const from = now.toISOString().slice(0, 10);
+  const to = new Date(now.getTime() + 90 * 86400000).toISOString().slice(0, 10);
   return { from, to };
 }
 

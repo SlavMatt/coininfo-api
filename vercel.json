@@ -3,6 +3,7 @@
     { "path": "/api/cron/stock",     "schedule": "0 6 * * 1-5"  },
     { "path": "/api/cron/ipo",       "schedule": "0 6 * * 1-5"  },
     { "path": "/api/cron/dividends", "schedule": "0 6 * * 1-5"  },
+    { "path": "/api/cron/kr-stocks", "schedule": "0 6 * * 1-5"  },
     { "path": "/api/cron/macro",     "schedule": "0 5 * * 1"    },
     { "path": "/api/cron/energy",    "schedule": "30 15 * * 3"  },
     { "path": "/api/cron/deribit",   "schedule": "0 0 * * 0"    },

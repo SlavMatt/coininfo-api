@@ -1,0 +1,76 @@
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
+
+function getWeekRange(): { from: string; to: string } {
+  const now = new Date();
+  const day = now.getUTCDay(); // 0=Sun, 1=Mon
+  const mon = new Date(now);
+  mon.setUTCDate(now.getUTCDate() - ((day + 6) % 7));
+  const fri = new Date(mon);
+  fri.setUTCDate(mon.getUTCDate() + 4);
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  return { from: fmt(mon), to: fmt(fri) };
+}
+
+export async function GET(req: NextRequest) {
+  const auth = req.headers.get("authorization");
+  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  const { from, to } = getWeekRange();
+  const url = `https://finnhub.io/api/v1/calendar/earnings?from=${from}&to=${to}&token=${process.env.FINNHUB_API_KEY}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    return NextResponse.json({ error: "finnhub error", status: res.status }, { status: 502 });
+  }
+
+  const data = await res.json();
+  const items: unknown[] = data.earningsCalendar ?? [];
+
+  const rows = items
+    .filter((item: any) => item.date && item.symbol)
+    .map((item: any) => ({
+      id: `stock-earnings-${item.symbol}-${item.date}`,
+      date: item.date,
+      time_utc: null,
+      category: "stock" as const,
+      event_type: "earnings",
+      symbol: item.symbol,
+      title: item.name ?? item.symbol,
+      country: "US",
+      impact: null,
+      actual: item.eps != null ? String(item.eps) : null,
+      forecast: item.epsEstimate != null ? String(item.epsEstimate) : null,
+      prior: item.epsPrior != null ? String(item.epsPrior) : null,
+      unit: "USD",
+      detail: null,
+      source_url: null,
+      timing: (item.hour === "bmo" ? "bmo" : item.hour === "amc" ? "amc" : null) as "bmo" | "amc" | null,
+      eps_surprise: item.eps != null && item.epsEstimate != null
+        ? parseFloat((item.eps - item.epsEstimate).toFixed(4))
+        : null,
+      revenue_actual: item.revenueActual != null ? String(item.revenueActual) : null,
+      revenue_forecast: item.revenueEstimate != null ? String(item.revenueEstimate) : null,
+      exchange: null,
+      price_range: null,
+      raise_usd: null,
+      ipo_status: null,
+      underlying: null,
+      oi_usd: null,
+      max_pain: null,
+      net_flow_usd: null,
+      source: "finnhub",
+    }));
+
+  if (rows.length === 0) {
+    return NextResponse.json({ upserted: 0, range: { from, to } });
+  }
+
+  const { error } = await db.from("calendar_events").upsert(rows, { onConflict: "id" });
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ upserted: rows.length, range: { from, to } });
+}

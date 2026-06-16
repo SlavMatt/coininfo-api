@@ -1,0 +1,77 @@
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
+
+// EIA series: Weekly Petroleum Status Report
+// PET.WCRSTUS1.W = US crude oil stocks (thousand barrels)
+const EIA_SERIES = "PET.WCRSTUS1.W";
+
+function nextWednesday(): string {
+  const now = new Date();
+  const day = now.getUTCDay(); // 0=Sun
+  const daysUntilWed = (3 - day + 7) % 7 || 7;
+  const wed = new Date(now);
+  wed.setUTCDate(now.getUTCDate() + daysUntilWed);
+  return wed.toISOString().slice(0, 10);
+}
+
+export async function GET(req: NextRequest) {
+  const auth = req.headers.get("authorization");
+  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  // Fetch latest 2 data points to get actual + prior
+  const url = `https://api.eia.gov/v2/seriesid/${EIA_SERIES}?api_key=${process.env.EIA_API_KEY}&data[0]=value&sort[0][column]=period&sort[0][direction]=desc&length=2`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    return NextResponse.json({ error: "EIA error", status: res.status }, { status: 502 });
+  }
+
+  const json = await res.json();
+  const points: any[] = json?.response?.data ?? [];
+  if (points.length === 0) {
+    return NextResponse.json({ upserted: 0 });
+  }
+
+  const latest = points[0];
+  const prior = points[1];
+  const releaseDate = nextWednesday();
+
+  const row = {
+    id: `energy-eia-crude-${latest.period}`,
+    date: releaseDate,
+    time_utc: `${releaseDate}T14:30:00Z`,
+    category: "commodities" as const,
+    event_type: "energy",
+    symbol: "WTI",
+    title: "EIA Crude Oil Inventories",
+    country: "US",
+    impact: "high" as const,
+    actual: latest.value != null ? String(latest.value) : null,
+    forecast: null,
+    prior: prior?.value != null ? String(prior.value) : null,
+    unit: "K barrels",
+    detail: null,
+    source_url: null,
+    timing: null,
+    eps_surprise: null,
+    revenue_actual: null,
+    revenue_forecast: null,
+    exchange: null,
+    price_range: null,
+    raise_usd: null,
+    ipo_status: null,
+    underlying: null,
+    oi_usd: null,
+    max_pain: null,
+    net_flow_usd: null,
+    source: "eia",
+  };
+
+  const { error } = await db.from("calendar_events").upsert([row], { onConflict: "id" });
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ upserted: 1, period: latest.period });
+}

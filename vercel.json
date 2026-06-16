@@ -1,0 +1,12 @@
+{
+  "crons": [
+    { "path": "/api/cron/stock",     "schedule": "0 6 * * 1-5"  },
+    { "path": "/api/cron/ipo",       "schedule": "0 6 * * 1-5"  },
+    { "path": "/api/cron/dividends", "schedule": "0 6 * * 1-5"  },
+    { "path": "/api/cron/macro",     "schedule": "0 5 * * 1"    },
+    { "path": "/api/cron/energy",    "schedule": "30 15 * * 3"  },
+    { "path": "/api/cron/deribit",   "schedule": "0 0 * * 0"    },
+    { "path": "/api/cron/coinglass", "schedule": "0 22 * * 1-5" },
+    { "path": "/api/cron/coingecko", "schedule": "0 9 * * *"    }
+  ]
+}

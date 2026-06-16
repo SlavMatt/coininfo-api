@@ -1,29 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
-// GET /api/events?date=2025-06-16&category=stock&limit=50&offset=0
+// GET /api/events?date=2025-06-16&category=stock
+// GET /api/events?from=2025-06-16&to=2025-06-22&category=stock&limit=200
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const date = searchParams.get("date");
+  const from = searchParams.get("from");
+  const to = searchParams.get("to");
   const category = searchParams.get("category");
-  const limit = Math.min(parseInt(searchParams.get("limit") ?? "50"), 200);
-  const offset = parseInt(searchParams.get("offset") ?? "0");
-
-  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    return NextResponse.json({ error: "date required (YYYY-MM-DD)" }, { status: 400 });
-  }
+  const limit = Math.min(parseInt(searchParams.get("limit") ?? "100"), 500);
 
   let query = db
     .from("calendar_events")
     .select("*")
-    .eq("date", date)
+    .order("date", { ascending: true })
     .order("time_utc", { ascending: true, nullsFirst: false })
     .order("title", { ascending: true })
-    .range(offset, offset + limit - 1);
+    .limit(limit);
 
-  if (category) {
-    query = query.eq("category", category);
+  if (date) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return NextResponse.json({ error: "date must be YYYY-MM-DD" }, { status: 400 });
+    }
+    query = query.eq("date", date);
+  } else if (from && to) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      return NextResponse.json({ error: "from and to must be YYYY-MM-DD" }, { status: 400 });
+    }
+    query = query.gte("date", from).lte("date", to);
+  } else {
+    return NextResponse.json({ error: "date or from+to required" }, { status: 400 });
   }
+
+  if (category) query = query.eq("category", category);
 
   const { data, error } = await query;
   if (error) {
@@ -31,7 +41,7 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json(
-    { date, category: category ?? "all", count: data.length, events: data },
+    { count: data.length, events: data },
     {
       headers: {
         "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",

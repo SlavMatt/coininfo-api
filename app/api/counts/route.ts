@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
 // GET /api/counts?from=2025-06-16&to=2025-06-20
-// Returns: { "2025-06-16": { crypto: 3, stock: 110, commodities: 4, ipo: 1 }, ... }
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const from = searchParams.get("from");
@@ -12,9 +11,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "from and to required (YYYY-MM-DD)" }, { status: 400 });
   }
 
+  // Fetch minimal fields for aggregation
   const { data, error } = await db
-    .from("calendar_daily_counts")
-    .select("*")
+    .from("calendar_events")
+    .select("date, category")
     .gte("date", from)
     .lte("date", to);
 
@@ -22,12 +22,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Reshape: { [date]: { crypto, stock, commodities, ipo } }
+  // Aggregate counts per date per category in JS
   const result: Record<string, Record<string, number>> = {};
   for (const row of data ?? []) {
     const d = row.date as string;
+    const cat = row.category as string;
+    if (!d || !cat) continue;
     if (!result[d]) result[d] = { crypto: 0, stock: 0, commodities: 0, ipo: 0 };
-    result[d][row.category as string] = Number(row.count);
+    result[d][cat] = (result[d][cat] ?? 0) + 1;
   }
 
   return NextResponse.json(result, {

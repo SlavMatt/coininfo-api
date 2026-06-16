@@ -14,7 +14,7 @@ const PLATFORM_CRYPTO: Record<string, string> = {
   "tron":           "TRX",
   "sui":            "SUI",
   "hyperliquid":    "HYPE",
-  "trump":          "TRUMP",
+  "official-trump": "TRUMP",
   "axie-infinity":  "AXS",
   "aave":           "AAVE",
   "chainlink":      "LINK",

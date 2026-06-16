@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
+// Platform US stock symbols only
+const PLATFORM_STOCKS = new Set([
+  "TSLA", "MU", "AMD", "CRCL", "INTC", "SNDK",
+  "AAPL", "AMZN", "GOOGL", "META", "MSTR", "MSFT", "NVDA", "SPCX",
+]);
+
 function getWeekRange(): { from: string; to: string } {
   const now = new Date();
-  const day = now.getUTCDay(); // 0=Sun, 1=Mon
+  const day = now.getUTCDay();
   const mon = new Date(now);
   mon.setUTCDate(now.getUTCDate() - ((day + 6) % 7));
   const fri = new Date(mon);
@@ -29,7 +35,7 @@ export async function GET(req: NextRequest) {
   const items: unknown[] = data.earningsCalendar ?? [];
 
   const rows = items
-    .filter((item: any) => item.date && item.symbol)
+    .filter((item: any) => item.date && item.symbol && PLATFORM_STOCKS.has(item.symbol))
     .map((item: any) => ({
       id: `stock-earnings-${item.symbol}-${item.date}`,
       date: item.date,
@@ -64,7 +70,7 @@ export async function GET(req: NextRequest) {
     }));
 
   if (rows.length === 0) {
-    return NextResponse.json({ upserted: 0, range: { from, to } });
+    return NextResponse.json({ upserted: 0, range: { from, to }, note: "no platform stocks found this week" });
   }
 
   const { error } = await db.from("calendar_events").upsert(rows, { onConflict: "id" });
@@ -72,5 +78,5 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ upserted: rows.length, range: { from, to } });
+  return NextResponse.json({ upserted: rows.length, symbols: rows.map((r: any) => r.symbol), range: { from, to } });
 }

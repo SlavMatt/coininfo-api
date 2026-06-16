@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
-// Top 30 US dividend stocks to track
+// Platform US stocks only
 const DIVIDEND_SYMBOLS = [
-  "AAPL","MSFT","JNJ","PG","KO","PEP","T","VZ","XOM","CVX",
-  "JPM","BAC","WFC","GS","HD","WMT","MCD","IBM","MMM","CAT",
-  "GE","BA","HON","UNH","ABBV","MRK","PFE","LLY","AMGN","BMY",
+  "TSLA", "MU", "AMD", "CRCL", "INTC", "SNDK",
+  "AAPL", "AMZN", "GOOGL", "META", "MSTR", "MSFT", "NVDA", "SPCX",
 ];
 
 function getMonthRange(): { from: string; to: string } {
@@ -26,7 +25,6 @@ export async function GET(req: NextRequest) {
   const { from, to } = getMonthRange();
   const rows: unknown[] = [];
 
-  // Finnhub free tier: 60 req/min — fetch sequentially with small delay
   for (const symbol of DIVIDEND_SYMBOLS) {
     const url = `https://finnhub.io/api/v1/stock/dividend2?symbol=${symbol}&from=${from}&to=${to}&token=${process.env.FINNHUB_API_KEY}`;
     const res = await fetch(url);
@@ -66,7 +64,6 @@ export async function GET(req: NextRequest) {
         source: "finnhub",
       });
     }
-    // ~1 req/sec to stay within free tier limits
     await new Promise((r) => setTimeout(r, 1100));
   }
 

@@ -63,6 +63,20 @@ export function matchObservation(relDate: string, obs: { date: string; value: st
   return candidates[candidates.length - 1].value;
 }
 
+const FRED_SOURCE_URLS: Record<string, string> = {
+  CPI:    "https://fred.stlouisfed.org/series/CPIAUCSL",
+  PPI:    "https://fred.stlouisfed.org/series/PPIACO",
+  NFP:    "https://fred.stlouisfed.org/series/PAYEMS",
+  PCE:    "https://fred.stlouisfed.org/series/DPCERD3M086SBEA",
+  FOMC:   "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+  GDP:    "https://fred.stlouisfed.org/series/GDP",
+  RSALES: "https://fred.stlouisfed.org/series/RSAFS",
+  IJC:    "https://fred.stlouisfed.org/series/ICSA",
+  HOUST:  "https://fred.stlouisfed.org/series/HOUST",
+  UMCS:   "https://fred.stlouisfed.org/series/UMCSENT",
+  DURABLE:"https://fred.stlouisfed.org/series/DGORDER",
+};
+
 export function buildMacroRow(r: typeof FRED_RELEASES[0], date: string, actual: string | null): Record<string, unknown> {
   return {
     id: `fred-macro-${r.symbol}-${date}`,
@@ -79,7 +93,7 @@ export function buildMacroRow(r: typeof FRED_RELEASES[0], date: string, actual: 
     prior: null,
     unit: null,
     detail: null,
-    source_url: `https://fred.stlouisfed.org/release?release_id=${r.id}`,
+    source_url: FRED_SOURCE_URLS[r.symbol] ?? null,
     timing: null,
     eps_surprise: null,
     revenue_actual: null,

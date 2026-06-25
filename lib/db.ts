@@ -11,7 +11,7 @@ export type CalendarEvent = {
   id: string;
   date: string;
   time_utc: string | null;
-  category: "crypto" | "stock" | "commodities" | "ipo";
+  category: "crypto" | "stock" | "economic" | "commodities" | "ipo";
   event_type: string | null;
   symbol: string | null;
   title: string;

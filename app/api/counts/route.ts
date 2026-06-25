@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
     const d = row.date as string;
     const cat = row.category as string;
     if (!d || !cat) continue;
-    if (!result[d]) result[d] = { crypto: 0, stock: 0, commodities: 0, ipo: 0 };
+    if (!result[d]) result[d] = { crypto: 0, stock: 0, economic: 0, commodities: 0, ipo: 0 };
     result[d][cat] = (result[d][cat] ?? 0) + 1;
   }
 

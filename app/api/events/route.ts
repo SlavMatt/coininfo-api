@@ -33,7 +33,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "date or from+to required" }, { status: 400 });
   }
 
-  if (category) query = query.eq("category", category);
+  // Normalise category aliases sent by the frontend
+  const categoryMap: Record<string, string> = { stocks: "stock" };
+  const resolvedCategory = category ? (categoryMap[category] ?? category) : null;
+  if (resolvedCategory) query = query.eq("category", resolvedCategory);
 
   const { data, error } = await query;
   if (error) {

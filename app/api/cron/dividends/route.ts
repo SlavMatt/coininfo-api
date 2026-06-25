@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
+export const maxDuration = 60;
+
 // Platform US stocks only
 const DIVIDEND_SYMBOLS = [
   "TSLA", "MU", "AMD", "CRCL", "INTC", "SNDK",
   "AAPL", "AMZN", "GOOGL", "META", "MSTR", "MSFT", "NVDA", "SPCX",
+  "ARM", "WDC",
 ];
 
 function getMonthRange(): { from: string; to: string } {

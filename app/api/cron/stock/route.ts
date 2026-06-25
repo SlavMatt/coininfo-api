@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 const PLATFORM_STOCKS = new Set([
   "TSLA", "MU", "AMD", "CRCL", "INTC", "SNDK",
   "AAPL", "AMZN", "GOOGL", "META", "MSTR", "MSFT", "NVDA", "SPCX",
+  "ARM", "WDC",
 ]);
 
 function getRange(): { from: string; to: string } {

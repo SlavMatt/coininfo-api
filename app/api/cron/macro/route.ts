@@ -68,7 +68,7 @@ export function buildMacroRow(r: typeof FRED_RELEASES[0], date: string, actual: 
     id: `fred-macro-${r.symbol}-${date}`,
     date,
     time_utc: r.time_utc,
-    category: "commodities" as const,
+    category: "economic" as const,
     event_type: "macro",
     symbol: r.symbol,
     title: r.title,

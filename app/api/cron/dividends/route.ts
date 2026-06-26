@@ -3,11 +3,16 @@ import { db } from "@/lib/db";
 
 export const maxDuration = 60;
 
-// Platform US stocks only
+// Only stocks that actually pay dividends
 const DIVIDEND_SYMBOLS = [
-  "TSLA", "MU", "AMD", "CRCL", "INTC", "SNDK",
-  "AAPL", "AMZN", "GOOGL", "META", "MSTR", "MSFT", "NVDA", "SPCX",
-  "ARM", "WDC",
+  "AAPL",   // ~$0.25/quarter
+  "MSFT",   // ~$0.83/quarter
+  "NVDA",   // ~$0.01/quarter
+  "INTC",   // ~$0.08/quarter
+  "META",   // ~$0.50/quarter (since 2024)
+  "GOOGL",  // ~$0.20/quarter (since 2024)
+  "WDC",    // Western Digital
+  "MU",     // Micron (small)
 ];
 
 function getMonthRange(): { from: string; to: string } {
@@ -27,16 +32,16 @@ export async function GET(req: NextRequest) {
   const rows: unknown[] = [];
 
   for (const symbol of DIVIDEND_SYMBOLS) {
-    const url = `https://finnhub.io/api/v1/stock/dividend2?symbol=${symbol}&from=${from}&to=${to}&token=${process.env.FINNHUB_API_KEY}`;
+    const url = `https://finnhub.io/api/v1/stock/dividend?symbol=${symbol}&from=${from}&to=${to}&token=${process.env.FINNHUB_API_KEY}`;
     const res = await fetch(url);
     if (!res.ok) continue;
     const data = await res.json();
     const items: unknown[] = data.data ?? [];
     for (const item of items as any[]) {
-      if (!item.exDate) continue;
+      if (!item.date) continue;
       rows.push({
-        id: `dividends-${symbol}-${item.exDate}`,
-        date: item.exDate,
+        id: `dividends-${symbol}-${item.date}`,
+        date: item.date,
         time_utc: null,
         category: "stock" as const,
         event_type: "dividends",
@@ -46,7 +51,7 @@ export async function GET(req: NextRequest) {
         impact: null,
         actual: item.amount != null ? String(item.amount) : null,
         forecast: null,
-        prior: item.prevDiv != null ? String(item.prevDiv) : null,
+        prior: item.adjustedAmount != null ? String(item.adjustedAmount) : null,
         unit: "USD",
         detail: item.payDate ? `Pay date: ${item.payDate}` : null,
         source_url: null,

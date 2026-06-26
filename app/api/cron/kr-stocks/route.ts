@@ -1,26 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
-// Platform Korean stocks: Alpha Vantage symbol → internal symbol
-const KR_STOCKS = [
-  { av: "000660.KS", symbol: "SKHYNIX", name: "SK Hynix",            country: "KR" },
-  { av: "005930.KS", symbol: "SAMSUNG", name: "Samsung Electronics", country: "KR" },
-];
+export const maxDuration = 60;
 
-// Parse Alpha Vantage EARNINGS_CALENDAR CSV response
-function parseEarningsCSV(csv: string): { date: string; estimate: string | null }[] {
-  const lines = csv.trim().split("\n");
-  if (lines.length < 2) return [];
-  // header: symbol,name,reportDate,fiscalDateEnding,estimate,currency,timeOfTheDay
-  return lines.slice(1).flatMap((line) => {
-    const cols = line.split(",");
-    if (cols.length < 5) return [];
-    const date = cols[2]?.trim();
-    const estimate = cols[4]?.trim() || null;
-    if (!date || date.length !== 10) return [];
-    return [{ date, estimate: estimate === "None" || estimate === "" ? null : estimate }];
-  });
-}
+// Platform Korean stocks: Finnhub symbol → internal symbol
+const KR_STOCKS = [
+  { finnhub: "000660.KS", symbol: "SKHYNIX", name: "SK Hynix",            country: "KR" },
+  { finnhub: "005930.KS", symbol: "SAMSUNG", name: "Samsung Electronics", country: "KR" },
+];
 
 export async function GET(req: NextRequest) {
   const auth = req.headers.get("authorization");
@@ -28,27 +15,29 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const apiKey = process.env.ALPHA_VANTAGE_KEY;
+  const apiKey = process.env.FINNHUB_API_KEY;
   if (!apiKey) {
-    return NextResponse.json({ error: "ALPHA_VANTAGE_KEY not configured", upserted: 0 }, { status: 503 });
+    return NextResponse.json({ error: "FINNHUB_API_KEY not configured", upserted: 0 }, { status: 503 });
   }
 
   const today = new Date().toISOString().slice(0, 10);
+  const to = new Date(Date.now() + 180 * 86400000).toISOString().slice(0, 10);
   const rows: unknown[] = [];
 
   for (const stock of KR_STOCKS) {
     try {
-      const url = `https://www.alphavantage.co/query?function=EARNINGS_CALENDAR&symbol=${encodeURIComponent(stock.av)}&horizon=3month&apikey=${apiKey}`;
-      const res = await fetch(url, { headers: { Accept: "text/csv" } });
+      const url = `https://finnhub.io/api/v1/calendar/earnings?from=${today}&to=${to}&symbol=${encodeURIComponent(stock.finnhub)}&token=${apiKey}`;
+      const res = await fetch(url);
       if (!res.ok) { await new Promise((r) => setTimeout(r, 1000)); continue; }
 
-      const csv = await res.text();
-      const entries = parseEarningsCSV(csv).filter((e) => e.date >= today);
+      const data = await res.json();
+      const items: any[] = data.earningsCalendar ?? [];
 
-      for (const e of entries) {
+      for (const item of items) {
+        if (!item.date) continue;
         rows.push({
-          id: `kr-earnings-${stock.symbol}-${e.date}`,
-          date: e.date,
+          id: `kr-earnings-${stock.symbol}-${item.date}`,
+          date: item.date,
           time_utc: null,
           category: "stock" as const,
           event_type: "earnings",
@@ -56,16 +45,19 @@ export async function GET(req: NextRequest) {
           title: stock.name,
           country: stock.country,
           impact: "high" as const,
-          actual: null,
-          forecast: e.estimate,
-          prior: null,
+          actual: item.eps != null ? String(item.eps) : null,
+          forecast: item.epsEstimate != null ? String(item.epsEstimate) : null,
+          prior: item.epsPrior != null ? String(item.epsPrior) : null,
           unit: "KRW",
-          detail: `${stock.name} quarterly earnings. EPS consensus: ${e.estimate ?? "TBD"} KRW.`,
-          source_url: `https://finance.yahoo.com/quote/${encodeURIComponent(stock.av)}/financials/`,
-          timing: null,
-          eps_surprise: null,
-          revenue_actual: null,
-          revenue_forecast: null,
+          detail: null,
+          source_url: `https://finance.yahoo.com/quote/${encodeURIComponent(stock.finnhub)}/financials/`,
+          timing: (item.hour === "bmo" ? "bmo" : item.hour === "amc" ? "amc" : null) as "bmo" | "amc" | null,
+          eps_surprise:
+            item.eps != null && item.epsEstimate != null
+              ? parseFloat((item.eps - item.epsEstimate).toFixed(4))
+              : null,
+          revenue_actual: item.revenueActual != null ? String(item.revenueActual) : null,
+          revenue_forecast: item.revenueEstimate != null ? String(item.revenueEstimate) : null,
           exchange: "KRX",
           price_range: null,
           raise_usd: null,
@@ -74,13 +66,13 @@ export async function GET(req: NextRequest) {
           oi_usd: null,
           max_pain: null,
           net_flow_usd: null,
-          source: "alpha-vantage",
+          source: "finnhub",
         });
       }
     } catch {
       // continue to next stock
     }
-    await new Promise((r) => setTimeout(r, 13000)); // Alpha Vantage free: 5 req/min
+    await new Promise((r) => setTimeout(r, 1100)); // Finnhub free: 60 req/min
   }
 
   if (rows.length === 0) {

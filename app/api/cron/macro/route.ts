@@ -63,6 +63,13 @@ export function matchObservation(relDate: string, obs: { date: string; value: st
   return candidates[candidates.length - 1].value;
 }
 
+// Find the second most recent observation — used as "prior period" for past releases
+function matchPriorObservation(relDate: string, obs: { date: string; value: string }[]): string | null {
+  const candidates = obs.filter((o) => o.date <= relDate);
+  if (candidates.length < 2) return null;
+  return candidates[candidates.length - 2].value;
+}
+
 const FRED_SOURCE_URLS: Record<string, string> = {
   CPI:    "https://fred.stlouisfed.org/series/CPIAUCSL",
   PPI:    "https://fred.stlouisfed.org/series/PPIACO",
@@ -130,8 +137,8 @@ export async function GET(req: NextRequest) {
   const todayStr = today.toISOString().slice(0, 10);
   const from = todayStr;
   const to = new Date(today.getTime() + 90 * 86400000).toISOString().slice(0, 10);
-  // obs lookback: 3 months before today to capture prior values
-  const obsFrom = new Date(today.getTime() - 90 * 86400000).toISOString().slice(0, 10);
+  // obs lookback: 6 months to capture enough history for prior period values
+  const obsFrom = new Date(today.getTime() - 180 * 86400000).toISOString().slice(0, 10);
 
   const rows: unknown[] = [];
 
@@ -142,10 +149,17 @@ export async function GET(req: NextRequest) {
     ]);
 
     for (const date of dates) {
-      const matched = matchObservation(date, obs);
-      // Future release: matched value is the last known (prior), not yet actual
       const isFuture = date > todayStr;
-      rows.push(buildMacroRow(r, date, isFuture ? null : matched, isFuture ? matched : null));
+      if (isFuture) {
+        // Future: matched value = last known (prior), actual not yet available
+        const prior = matchObservation(date, obs);
+        rows.push(buildMacroRow(r, date, null, prior));
+      } else {
+        // Past: most recent obs = actual, second most recent = prior period
+        const actual = matchObservation(date, obs);
+        const prior = matchPriorObservation(date, obs);
+        rows.push(buildMacroRow(r, date, actual, prior));
+      }
     }
 
     await new Promise((resolve) => setTimeout(resolve, 300));

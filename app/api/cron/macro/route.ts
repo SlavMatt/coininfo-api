@@ -77,7 +77,12 @@ const FRED_SOURCE_URLS: Record<string, string> = {
   DURABLE:"https://fred.stlouisfed.org/series/DGORDER",
 };
 
-export function buildMacroRow(r: typeof FRED_RELEASES[0], date: string, actual: string | null): Record<string, unknown> {
+export function buildMacroRow(
+  r: typeof FRED_RELEASES[0],
+  date: string,
+  actual: string | null,
+  prior: string | null = null,
+): Record<string, unknown> {
   return {
     id: `fred-macro-${r.symbol}-${date}`,
     date,
@@ -90,7 +95,7 @@ export function buildMacroRow(r: typeof FRED_RELEASES[0], date: string, actual: 
     impact: r.impact,
     actual,
     forecast: null,
-    prior: null,
+    prior,
     unit: null,
     detail: null,
     source_url: FRED_SOURCE_URLS[r.symbol] ?? null,
@@ -122,7 +127,8 @@ export async function GET(req: NextRequest) {
   }
 
   const today = new Date();
-  const from = today.toISOString().slice(0, 10);
+  const todayStr = today.toISOString().slice(0, 10);
+  const from = todayStr;
   const to = new Date(today.getTime() + 90 * 86400000).toISOString().slice(0, 10);
   // obs lookback: 3 months before today to capture prior values
   const obsFrom = new Date(today.getTime() - 90 * 86400000).toISOString().slice(0, 10);
@@ -136,8 +142,10 @@ export async function GET(req: NextRequest) {
     ]);
 
     for (const date of dates) {
-      const actual = matchObservation(date, obs);
-      rows.push(buildMacroRow(r, date, actual));
+      const matched = matchObservation(date, obs);
+      // Future release: matched value is the last known (prior), not yet actual
+      const isFuture = date > todayStr;
+      rows.push(buildMacroRow(r, date, isFuture ? null : matched, isFuture ? matched : null));
     }
 
     await new Promise((resolve) => setTimeout(resolve, 300));

@@ -86,8 +86,18 @@ function formatEvent(row: Record<string, unknown>) {
 }
 
 // Index assets show broad category events (economic macro + category-wide)
-// All other assets only show events for their own symbol
 const INDEX_SYMBOLS = new Set(["NDX100", "SP500", "SPCX"]);
+
+// BTC/ETH/SOL have their own Deribit options events
+// Other crypto falls back to showing BTC+ETH events as market proxy
+const CRYPTO_FLAGSHIP = new Set(["BTC", "ETH", "SOL"]);
+
+// Energy: EIA used to store symbol="WTI"; new rows use CL/BZ.
+// Include "WTI" as fallback while old rows persist.
+const SYMBOL_LOOKUP: Record<string, string[]> = {
+  CL: ["CL", "WTI"],
+  BZ: ["BZ", "WTI"],
+};
 
 // GET /api/next-event?asset=BTC-PERP&after=2026-06-25&upcoming=5
 export async function GET(req: NextRequest) {
@@ -108,6 +118,15 @@ export async function GET(req: NextRequest) {
 
   // Exclude price_update (CoinGecko daily snapshots — not calendar events)
   const EXCLUDED_TYPES = ["price_update"];
+
+  // Resolve which DB symbols to search for this asset
+  function resolveSymbols(s: string): string[] | null {
+    if (SYMBOL_LOOKUP[s]) return SYMBOL_LOOKUP[s];
+    if (cats.includes("crypto") && !CRYPTO_FLAGSHIP.has(s)) return ["BTC", "ETH"];
+    return null; // null = use single .eq("symbol", s)
+  }
+
+  const symbolOverride = resolveSymbols(sym);
 
   let nextRow: Record<string, unknown> | undefined;
   let upcomingRows: Record<string, unknown>[];
@@ -156,11 +175,10 @@ export async function GET(req: NextRequest) {
       upcomingRows = allRows.slice(1, upcomingCount + 1);
     }
   } else {
-    // Non-index assets: only show events for this specific symbol
-    const { data, error } = await db
+    // Non-index assets: query own symbol, with fallbacks for certain asset classes
+    let q = db
       .from("calendar_events")
       .select("*")
-      .eq("symbol", sym)
       .in("category", cats)
       .not("event_type", "in", `(${EXCLUDED_TYPES.join(",")})`)
       .gte("date", after)
@@ -168,6 +186,13 @@ export async function GET(req: NextRequest) {
       .order("time_utc", { ascending: true, nullsFirst: false })
       .limit(upcomingCount + 2);
 
+    if (symbolOverride) {
+      q = q.in("symbol", symbolOverride);
+    } else {
+      q = q.eq("symbol", sym);
+    }
+
+    const { data, error } = await q;
     queryError = error;
     const allRows = data as Record<string, unknown>[] ?? [];
     nextRow = allRows[0];

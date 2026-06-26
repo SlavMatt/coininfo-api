@@ -5,10 +5,10 @@ import { db } from "@/lib/db";
 // PET.WCRSTUS1.W = US crude oil stocks (thousand barrels)
 const EIA_SERIES = "PET.WCRSTUS1.W";
 
-function nextWednesday(): string {
+function thisOrNextWednesday(): string {
   const now = new Date();
   const day = now.getUTCDay(); // 0=Sun
-  const daysUntilWed = (3 - day + 7) % 7 || 7;
+  const daysUntilWed = (3 - day + 7) % 7; // 0 = today is Wednesday
   const wed = new Date(now);
   wed.setUTCDate(now.getUTCDate() + daysUntilWed);
   return wed.toISOString().slice(0, 10);
@@ -35,15 +35,14 @@ export async function GET(req: NextRequest) {
 
   const latest = points[0];
   const prior = points[1];
-  const releaseDate = nextWednesday();
+  const releaseDate = thisOrNextWednesday();
 
-  const row = {
-    id: `energy-eia-crude-${latest.period}`,
+  // Store one row per platform crude symbol (CL = WTI, BZ = Brent both driven by same report)
+  const baseRow = {
     date: releaseDate,
     time_utc: "14:30:00",
     category: "commodities" as const,
     event_type: "energy",
-    symbol: "WTI",
     title: "EIA Crude Oil Inventories",
     country: "US",
     impact: "high" as const,
@@ -68,10 +67,15 @@ export async function GET(req: NextRequest) {
     source: "eia",
   };
 
-  const { error } = await db.from("calendar_events").upsert([row], { onConflict: "id" });
+  const rows = [
+    { ...baseRow, id: `energy-eia-crude-CL-${latest.period}`, symbol: "CL" },
+    { ...baseRow, id: `energy-eia-crude-BZ-${latest.period}`, symbol: "BZ" },
+  ];
+
+  const { error } = await db.from("calendar_events").upsert(rows, { onConflict: "id" });
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ upserted: 1, period: latest.period });
+  return NextResponse.json({ upserted: 2, period: latest.period });
 }

@@ -85,6 +85,10 @@ function formatEvent(row: Record<string, unknown>) {
   };
 }
 
+// Index assets show broad category events (economic macro + category-wide)
+// All other assets only show events for their own symbol
+const INDEX_SYMBOLS = new Set(["NDX100", "SP500", "SPCX"]);
+
 // GET /api/next-event?asset=BTC-PERP&after=2026-06-25&upcoming=5
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
@@ -105,58 +109,72 @@ export async function GET(req: NextRequest) {
   // Exclude price_update (CoinGecko daily snapshots — not calendar events)
   const EXCLUDED_TYPES = ["price_update"];
 
-  // 1. Try to find events specific to this symbol first (e.g. TSLA earnings for TSLA-PERP)
-  const { data: ownData } = await db
-    .from("calendar_events")
-    .select("*")
-    .eq("symbol", sym)
-    .in("category", cats)
-    .not("event_type", "in", `(${EXCLUDED_TYPES.join(",")})`)
-    .gte("date", after)
-    .order("date", { ascending: true })
-    .order("time_utc", { ascending: true, nullsFirst: false })
-    .limit(1);
-
-  // 2. Fetch broader category events (excluding price_update), more than we need so we can merge
-  const { data: broadData, error } = await db
-    .from("calendar_events")
-    .select("*")
-    .in("category", cats)
-    .not("event_type", "in", `(${EXCLUDED_TYPES.join(",")})`)
-    .gte("date", after)
-    .order("date", { ascending: true })
-    .order("time_utc", { ascending: true, nullsFirst: false })
-    .limit(upcomingCount + 2);
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  const allRows = broadData as Record<string, unknown>[] ?? [];
-
-  // If we found a symbol-specific event and it's earlier than the broad #1, promote it
   let nextRow: Record<string, unknown> | undefined;
   let upcomingRows: Record<string, unknown>[];
+  let queryError: { message: string } | null = null;
 
-  const ownRow = ownData?.[0] as Record<string, unknown> | undefined;
-  const broadFirst = allRows[0];
+  if (INDEX_SYMBOLS.has(sym)) {
+    // Index assets: show symbol-specific events + broad category events (macro, etc.)
+    const { data: ownData } = await db
+      .from("calendar_events")
+      .select("*")
+      .eq("symbol", sym)
+      .in("category", cats)
+      .not("event_type", "in", `(${EXCLUDED_TYPES.join(",")})`)
+      .gte("date", after)
+      .order("date", { ascending: true })
+      .order("time_utc", { ascending: true, nullsFirst: false })
+      .limit(1);
 
-  if (ownRow && (!broadFirst || (ownRow.date as string) <= (broadFirst.date as string))) {
-    // Own event is at least as early as the broad first — use it as next
-    nextRow = ownRow;
-    upcomingRows = allRows.filter((r) => r.id !== ownRow.id).slice(0, upcomingCount);
-  } else if (ownRow) {
-    // Own event exists but a broader event is earlier — show broader first, own event in upcoming
-    nextRow = broadFirst;
-    const rest = allRows.slice(1).filter((r) => r.id !== ownRow.id);
-    // Insert ownRow at correct date position in rest
-    const insertIdx = rest.findIndex((r) => (r.date as string) >= (ownRow.date as string));
-    if (insertIdx === -1) rest.push(ownRow);
-    else rest.splice(insertIdx, 0, ownRow);
-    upcomingRows = rest.slice(0, upcomingCount);
+    const { data: broadData, error } = await db
+      .from("calendar_events")
+      .select("*")
+      .in("category", cats)
+      .not("event_type", "in", `(${EXCLUDED_TYPES.join(",")})`)
+      .gte("date", after)
+      .order("date", { ascending: true })
+      .order("time_utc", { ascending: true, nullsFirst: false })
+      .limit(upcomingCount + 2);
+
+    queryError = error;
+    const allRows = broadData as Record<string, unknown>[] ?? [];
+    const ownRow = ownData?.[0] as Record<string, unknown> | undefined;
+    const broadFirst = allRows[0];
+
+    if (ownRow && (!broadFirst || (ownRow.date as string) <= (broadFirst.date as string))) {
+      nextRow = ownRow;
+      upcomingRows = allRows.filter((r) => r.id !== ownRow.id).slice(0, upcomingCount);
+    } else if (ownRow) {
+      nextRow = broadFirst;
+      const rest = allRows.slice(1).filter((r) => r.id !== ownRow.id);
+      const insertIdx = rest.findIndex((r) => (r.date as string) >= (ownRow.date as string));
+      if (insertIdx === -1) rest.push(ownRow);
+      else rest.splice(insertIdx, 0, ownRow);
+      upcomingRows = rest.slice(0, upcomingCount);
+    } else {
+      nextRow = allRows[0];
+      upcomingRows = allRows.slice(1, upcomingCount + 1);
+    }
   } else {
-    // No symbol-specific event — use chronological order from broad query
+    // Non-index assets: only show events for this specific symbol
+    const { data, error } = await db
+      .from("calendar_events")
+      .select("*")
+      .eq("symbol", sym)
+      .in("category", cats)
+      .not("event_type", "in", `(${EXCLUDED_TYPES.join(",")})`)
+      .gte("date", after)
+      .order("date", { ascending: true })
+      .order("time_utc", { ascending: true, nullsFirst: false })
+      .limit(upcomingCount + 2);
+
+    queryError = error;
+    const allRows = data as Record<string, unknown>[] ?? [];
     nextRow = allRows[0];
     upcomingRows = allRows.slice(1, upcomingCount + 1);
   }
+
+  if (queryError) return NextResponse.json({ error: queryError.message }, { status: 500 });
 
   if (!nextRow) {
     return NextResponse.json(

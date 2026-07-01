@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { logCronFailure } from "@/lib/log";
 
 // Platform crypto that has Deribit options
 const UNDERLYINGS = ["BTC", "ETH", "SOL"];
@@ -43,8 +44,8 @@ async function fetchOiByDate(underlying: string): Promise<Map<string, number>> {
     const yr = "20" + expStr.slice(5, 7);
     if (!mon) continue;
     const date = `${yr}-${mon}-${day}`;
-    // open_interest_usd is OI in USD; fall back to open_interest if not available
-    const oiUsd = item.open_interest_usd ?? (item.open_interest ?? 0);
+    // open_interest_usd is OI in USD; open_interest is coin-denominated — don't mix units
+    const oiUsd = item.open_interest_usd ?? null;
     oiByDate.set(date, (oiByDate.get(date) ?? 0) + oiUsd);
   }
   return oiByDate;
@@ -103,6 +104,7 @@ export async function GET(req: NextRequest) {
 
   const { error } = await db.from("calendar_events").upsert(rows as any[], { onConflict: "id" });
   if (error) {
+    logCronFailure("cron/deribit", "supabase upsert failed", error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 

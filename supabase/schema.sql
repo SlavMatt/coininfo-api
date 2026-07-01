@@ -49,14 +49,14 @@ create index idx_cal_date_cat on public.calendar_events using btree (date, categ
 create index idx_cal_symbol   on public.calendar_events using btree (symbol, date);
 create index idx_cal_category on public.calendar_events using btree (category, date);
 
--- Likely a VIEW (no PK/indexes/constraints returned by pg_catalog for it),
--- probably a per-day aggregate over calendar_events grouped by category.
--- Definition unknown — dump it with:
---   select pg_get_viewdef('public.calendar_daily_counts', true);
--- and paste the result back to be added here.
--- create view public.calendar_daily_counts as ...
---   date          date,
---   crypto        bigint,
---   stock         bigint,
---   commodities   bigint,
---   ipo           bigint
+-- Note: the ipo column always returns 0 — category='ipo' is not in the
+-- calendar_events CHECK constraint, so no rows can have that value.
+create view public.calendar_daily_counts as
+  select
+    date,
+    count(*) filter (where category = 'crypto')      as crypto,
+    count(*) filter (where category = 'stock')       as stock,
+    count(*) filter (where category = 'commodities') as commodities,
+    count(*) filter (where category = 'ipo')         as ipo
+  from calendar_events
+  group by date;

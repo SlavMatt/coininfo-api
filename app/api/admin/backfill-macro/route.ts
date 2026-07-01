@@ -8,6 +8,7 @@ import {
   matchObservation,
   buildMacroRow,
 } from "@/app/api/cron/macro/route";
+import { logCronFailure } from "@/lib/log";
 
 // POST /api/admin/backfill-macro
 // Backfills 1 year of FRED macro release history with actuals
@@ -48,7 +49,10 @@ export async function POST(req: NextRequest) {
   }
 
   const { error } = await db.from("calendar_events").upsert(rows as any[], { onConflict: "id" });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    logCronFailure("admin/backfill-macro", "supabase upsert failed", error.message);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
   return NextResponse.json({ upserted: rows.length, summary, range: { from, to } });
 }

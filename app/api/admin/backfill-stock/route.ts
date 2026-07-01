@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-
-const PLATFORM_STOCKS = [
-  "TSLA", "MU", "AMD", "INTC",
-  "AAPL", "AMZN", "GOOGL", "META", "MSTR", "MSFT", "NVDA",
-];
+import { PLATFORM_STOCKS } from "@/lib/constants";
+import { logCronFailure } from "@/lib/log";
 
 // POST /api/admin/backfill-stock
 // Uses Alpha Vantage EARNINGS function — returns real reportedDate + historical EPS
@@ -84,12 +81,19 @@ export async function POST(req: NextRequest) {
     await new Promise((r) => setTimeout(r, 13000)); // 5 req/min free tier
   }
 
+  if (errors.length > 0) {
+    logCronFailure("admin/backfill-stock", `${errors.length} symbol(s) failed`, errors);
+  }
+
   if (rows.length === 0) {
     return NextResponse.json({ upserted: 0, bySymbol, errors });
   }
 
   const { error } = await db.from("calendar_events").upsert(rows, { onConflict: "id" });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    logCronFailure("admin/backfill-stock", "supabase upsert failed", error.message);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
   return NextResponse.json({ upserted: rows.length, bySymbol, errors, range: { from: oneYearAgo, to: ninetyDaysOut } });
 }

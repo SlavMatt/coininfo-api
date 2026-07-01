@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { logCronFailure } from "@/lib/log";
 
 // POST /api/admin/backfill-energy
 // Backfills 1 year of EIA weekly crude oil inventory data
@@ -17,7 +18,10 @@ export async function POST(req: NextRequest) {
 
   const url = `https://api.eia.gov/v2/seriesid/PET.WCRSTUS1.W?api_key=${eiaKey}&start=${start}&out=json`;
   const res = await fetch(url);
-  if (!res.ok) return NextResponse.json({ error: "EIA fetch failed", status: res.status }, { status: 502 });
+  if (!res.ok) {
+    logCronFailure("admin/backfill-energy", "EIA fetch failed", res.status);
+    return NextResponse.json({ error: "EIA fetch failed", status: res.status }, { status: 502 });
+  }
 
   const json = await res.json();
   const data: { period: string; value: number }[] = json?.response?.data ?? [];
@@ -64,7 +68,10 @@ export async function POST(req: NextRequest) {
   });
 
   const { error } = await db.from("calendar_events").upsert(rows, { onConflict: "id" });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    logCronFailure("admin/backfill-energy", "supabase upsert failed", error.message);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
   return NextResponse.json({ upserted: rows.length, range: { from: start, to: today.toISOString().slice(0, 10) } });
 }

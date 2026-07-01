@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { logCronFailure } from "@/lib/log";
 
 // Hardcoded upcoming KR earnings dates (update annually from company IR sites)
 // Samsung: ir.samsung.com   SK Hynix: investor.skhynix.com
@@ -81,7 +82,10 @@ export async function POST(req: NextRequest) {
     .from("calendar_events")
     .upsert(KR_SEED_ROWS, { onConflict: "id" });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    logCronFailure("admin/seed-kr", "supabase upsert failed", error.message);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
   return NextResponse.json({
     seeded: KR_SEED_ROWS.length,

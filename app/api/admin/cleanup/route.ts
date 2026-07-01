@@ -1,15 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-
-const PLATFORM_STOCKS = [
-  "TSLA","MU","AMD","CRCL","INTC","SNDK",
-  "AAPL","AMZN","GOOGL","META","MSTR","MSFT","NVDA","SPCX",
-];
-
-const PLATFORM_CRYPTO = [
-  "BTC","ETH","SOL","XRP","BNB","ADA","DOGE","LTC","TRX",
-  "SUI","HYPE","TRUMP","AXS","AAVE","LINK","PAXG","ZEC",
-];
+import { PLATFORM_STOCKS, PLATFORM_CRYPTO } from "@/lib/constants";
+import { logCronFailure } from "@/lib/log";
 
 // DELETE non-platform earnings and trending data, keep options/etf/ipo
 export async function POST(req: NextRequest) {
@@ -23,7 +15,7 @@ export async function POST(req: NextRequest) {
     .from("calendar_events")
     .delete({ count: "exact" })
     .eq("event_type", "earnings")
-    .not("symbol", "in", `(${PLATFORM_STOCKS.map((s) => `"${s}"`).join(",")})`);
+    .not("symbol", "in", `(${PLATFORM_STOCKS.join(",")})`);
 
   // Delete old "trending" events (replaced by "price_update")
   const { error: e2, count: c2 } = await db
@@ -36,10 +28,12 @@ export async function POST(req: NextRequest) {
     .from("calendar_events")
     .delete({ count: "exact" })
     .eq("event_type", "price_update")
-    .not("symbol", "in", `(${PLATFORM_CRYPTO.map((s) => `"${s}"`).join(",")})`);
+    .not("symbol", "in", `(${PLATFORM_CRYPTO.join(",")})`);
 
   if (e1 || e2 || e3) {
-    return NextResponse.json({ errors: [e1?.message, e2?.message, e3?.message].filter(Boolean) }, { status: 500 });
+    const errors = [e1?.message, e2?.message, e3?.message].filter(Boolean);
+    logCronFailure("admin/cleanup", "supabase delete failed", errors);
+    return NextResponse.json({ errors }, { status: 500 });
   }
 
   return NextResponse.json({ deleted: { nonPlatformEarnings: c1, trendingEvents: c2, nonPlatformCrypto: c3 } });

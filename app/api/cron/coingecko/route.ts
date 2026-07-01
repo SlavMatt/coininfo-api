@@ -1,26 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-
-// Platform crypto coins: CoinGecko ID → platform symbol
-const PLATFORM_CRYPTO: Record<string, string> = {
-  "bitcoin":        "BTC",
-  "ethereum":       "ETH",
-  "solana":         "SOL",
-  "ripple":         "XRP",
-  "binancecoin":    "BNB",
-  "cardano":        "ADA",
-  "dogecoin":       "DOGE",
-  "litecoin":       "LTC",
-  "tron":           "TRX",
-  "sui":            "SUI",
-  "hyperliquid":    "HYPE",
-  "official-trump": "TRUMP",
-  "axie-infinity":  "AXS",
-  "aave":           "AAVE",
-  "chainlink":      "LINK",
-  "pax-gold":       "PAXG",
-  "zcash":          "ZEC",
-};
+import { PLATFORM_CRYPTO_MAP as PLATFORM_CRYPTO } from "@/lib/constants";
+import { logCronFailure } from "@/lib/log";
 
 export async function GET(req: NextRequest) {
   const auth = req.headers.get("authorization");
@@ -33,6 +14,7 @@ export async function GET(req: NextRequest) {
 
   const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (!res.ok) {
+    logCronFailure("cron/coingecko", "coingecko error", res.status);
     return NextResponse.json({ error: "coingecko error", status: res.status }, { status: 502 });
   }
 
@@ -71,7 +53,7 @@ export async function GET(req: NextRequest) {
         raise_usd: null,
         ipo_status: null,
         underlying: symbol,
-        oi_usd: item.market_cap ?? null,
+        oi_usd: null,
         max_pain: null,
         net_flow_usd: null,
         source: "coingecko",
@@ -84,6 +66,7 @@ export async function GET(req: NextRequest) {
 
   const { error } = await db.from("calendar_events").upsert(rows, { onConflict: "id" });
   if (error) {
+    logCronFailure("cron/coingecko", "supabase upsert failed", error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 

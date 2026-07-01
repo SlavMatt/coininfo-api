@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { logCronFailure } from "@/lib/log";
 
 // CME Gold (GC) & Silver (SI) standard monthly options
 // Expiry: last Friday of the month prior to the delivery month
@@ -70,7 +71,10 @@ export async function GET(req: NextRequest) {
   }
 
   const { error } = await db.from("calendar_events").upsert(rows as never[], { onConflict: "id" });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    logCronFailure("admin/seed-cme", "supabase upsert failed", error.message);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
   return NextResponse.json({ upserted: rows.length, dates: CME_EXPIRY_DATES.map((d) => d.date) });
 }

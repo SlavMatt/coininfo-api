@@ -1,12 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { PLATFORM_STOCKS as PLATFORM_STOCKS_LIST } from "@/lib/constants";
+import { logCronFailure } from "@/lib/log";
 
-// Platform US stock symbols only
-const PLATFORM_STOCKS = new Set([
-  "TSLA", "MU", "AMD", "CRCL", "INTC", "SNDK",
-  "AAPL", "AMZN", "GOOGL", "META", "MSTR", "MSFT", "NVDA", "SPCX",
-  "ARM", "WDC",
-]);
+const PLATFORM_STOCKS = new Set(PLATFORM_STOCKS_LIST);
 
 function getRange(): { from: string; to: string } {
   const now = new Date();
@@ -25,6 +22,7 @@ export async function GET(req: NextRequest) {
   const url = `https://finnhub.io/api/v1/calendar/earnings?from=${from}&to=${to}&token=${process.env.FINNHUB_API_KEY}`;
   const res = await fetch(url);
   if (!res.ok) {
+    logCronFailure("cron/stock", "finnhub error", res.status);
     return NextResponse.json({ error: "finnhub error", status: res.status }, { status: 502 });
   }
 
@@ -72,6 +70,7 @@ export async function GET(req: NextRequest) {
 
   const { error } = await db.from("calendar_events").upsert(rows, { onConflict: "id" });
   if (error) {
+    logCronFailure("cron/stock", "supabase upsert failed", error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 

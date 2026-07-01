@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { logCronFailure } from "@/lib/log";
 
 // EIA series: Weekly Petroleum Status Report
 // PET.WCRSTUS1.W = US crude oil stocks (thousand barrels)
@@ -24,6 +25,7 @@ export async function GET(req: NextRequest) {
   const url = `https://api.eia.gov/v2/seriesid/${EIA_SERIES}?api_key=${process.env.EIA_API_KEY}&data[0]=value&sort[0][column]=period&sort[0][direction]=desc&length=2`;
   const res = await fetch(url);
   if (!res.ok) {
+    logCronFailure("cron/energy", "EIA error", res.status);
     return NextResponse.json({ error: "EIA error", status: res.status }, { status: 502 });
   }
 
@@ -74,6 +76,7 @@ export async function GET(req: NextRequest) {
 
   const { error } = await db.from("calendar_events").upsert(rows, { onConflict: "id" });
   if (error) {
+    logCronFailure("cron/energy", "supabase upsert failed", error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 

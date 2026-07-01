@@ -1,19 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { DIVIDEND_SYMBOLS } from "@/lib/constants";
+import { logCronFailure } from "@/lib/log";
 
 export const maxDuration = 60;
-
-// Only stocks that actually pay dividends
-const DIVIDEND_SYMBOLS = [
-  "AAPL",   // ~$0.25/quarter
-  "MSFT",   // ~$0.83/quarter
-  "NVDA",   // ~$0.01/quarter
-  "INTC",   // ~$0.08/quarter
-  "META",   // ~$0.50/quarter (since 2024)
-  "GOOGL",  // ~$0.20/quarter (since 2024)
-  "WDC",    // Western Digital
-  "MU",     // Micron (small)
-];
 
 function getMonthRange(): { from: string; to: string } {
   const now = new Date();
@@ -34,7 +24,7 @@ export async function GET(req: NextRequest) {
   for (const symbol of DIVIDEND_SYMBOLS) {
     const url = `https://finnhub.io/api/v1/stock/dividend?symbol=${symbol}&from=${from}&to=${to}&token=${process.env.FINNHUB_API_KEY}`;
     const res = await fetch(url);
-    if (!res.ok) continue;
+    if (!res.ok) { logCronFailure("cron/dividends", `finnhub error for ${symbol}`, res.status); continue; }
     const data = await res.json();
     const items: unknown[] = data.data ?? [];
     for (const item of items as any[]) {
@@ -79,6 +69,7 @@ export async function GET(req: NextRequest) {
 
   const { error } = await db.from("calendar_events").upsert(rows as any[], { onConflict: "id" });
   if (error) {
+    logCronFailure("cron/dividends", "supabase upsert failed", error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { logCronFailure } from "@/lib/log";
 
 export const FRED_RELEASES = [
   { id: 46,  symbol: "CPI",    title: "CPI — Consumer Price Index",             impact: "high" as const, time_utc: "13:30:00" },
@@ -170,7 +171,10 @@ export async function GET(req: NextRequest) {
   }
 
   const { error } = await db.from("calendar_events").upsert(rows as any[], { onConflict: "id" });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    logCronFailure("cron/macro", "supabase upsert failed", error.message);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
   return NextResponse.json({ upserted: rows.length, releases: FRED_RELEASES.map((r) => r.symbol) });
 }

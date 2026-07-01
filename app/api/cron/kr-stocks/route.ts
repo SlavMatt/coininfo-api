@@ -1,13 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { KR_STOCKS } from "@/lib/constants";
+import { logCronFailure } from "@/lib/log";
 
 export const maxDuration = 60;
-
-// Platform Korean stocks: Finnhub symbol → internal symbol
-const KR_STOCKS = [
-  { finnhub: "000660.KS", symbol: "SKHYNIX", name: "SK Hynix",            country: "KR" },
-  { finnhub: "005930.KS", symbol: "SAMSUNG", name: "Samsung Electronics", country: "KR" },
-];
 
 export async function GET(req: NextRequest) {
   const auth = req.headers.get("authorization");
@@ -28,7 +24,11 @@ export async function GET(req: NextRequest) {
     try {
       const url = `https://finnhub.io/api/v1/calendar/earnings?from=${today}&to=${to}&symbol=${encodeURIComponent(stock.finnhub)}&token=${apiKey}`;
       const res = await fetch(url);
-      if (!res.ok) { await new Promise((r) => setTimeout(r, 1000)); continue; }
+      if (!res.ok) {
+        logCronFailure("cron/kr-stocks", `finnhub error for ${stock.symbol}`, res.status);
+        await new Promise((r) => setTimeout(r, 1000));
+        continue;
+      }
 
       const data = await res.json();
       const items: any[] = data.earningsCalendar ?? [];
@@ -69,8 +69,8 @@ export async function GET(req: NextRequest) {
           source: "finnhub",
         });
       }
-    } catch {
-      // continue to next stock
+    } catch (e: any) {
+      logCronFailure("cron/kr-stocks", `fetch threw for ${stock.symbol}`, e?.message);
     }
     await new Promise((r) => setTimeout(r, 1100)); // Finnhub free: 60 req/min
   }
@@ -80,7 +80,10 @@ export async function GET(req: NextRequest) {
   }
 
   const { error } = await db.from("calendar_events").upsert(rows as any[], { onConflict: "id" });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    logCronFailure("cron/kr-stocks", "supabase upsert failed", error.message);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
   return NextResponse.json({ upserted: rows.length, symbols: rows.map((r: any) => r.symbol) });
 }

@@ -160,13 +160,15 @@ export async function GET(req: NextRequest) {
     const ownRow = ownData?.[0] as Record<string, unknown> | undefined;
     const broadFirst = allRows[0];
 
-    if (ownRow && (!broadFirst || (ownRow.date as string) <= (broadFirst.date as string))) {
+    const rowSortKey = (r: Record<string, unknown>) =>
+      `${r.date as string}T${(r.time_utc as string | null) ?? "99:99:99"}`;
+    if (ownRow && (!broadFirst || rowSortKey(ownRow) <= rowSortKey(broadFirst))) {
       nextRow = ownRow;
       upcomingRows = allRows.filter((r) => r.id !== ownRow.id).slice(0, upcomingCount);
     } else if (ownRow) {
       nextRow = broadFirst;
       const rest = allRows.slice(1).filter((r) => r.id !== ownRow.id);
-      const insertIdx = rest.findIndex((r) => (r.date as string) >= (ownRow.date as string));
+      const insertIdx = rest.findIndex((r) => rowSortKey(r) >= rowSortKey(ownRow));
       if (insertIdx === -1) rest.push(ownRow);
       else rest.splice(insertIdx, 0, ownRow);
       upcomingRows = rest.slice(0, upcomingCount);

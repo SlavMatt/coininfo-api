@@ -51,12 +51,22 @@ create index idx_cal_category on public.calendar_events using btree (category, d
 
 -- Note: the ipo column always returns 0 — category='ipo' is not in the
 -- calendar_events CHECK constraint, so no rows can have that value.
+-- TODO: apply the following in Supabase SQL Editor (MCP has no write access):
+--   CREATE OR REPLACE VIEW public.calendar_daily_counts AS
+--   SELECT date,
+--     count(*) FILTER (WHERE category = 'crypto')      AS crypto,
+--     count(*) FILTER (WHERE category = 'stock')       AS stock,
+--     count(*) FILTER (WHERE category = 'commodities') AS commodities,
+--     count(*) FILTER (WHERE category = 'economic')    AS economic,
+--     count(*) FILTER (WHERE category = 'ipo')         AS ipo
+--   FROM calendar_events GROUP BY date;
 create view public.calendar_daily_counts as
   select
     date,
     count(*) filter (where category = 'crypto')      as crypto,
     count(*) filter (where category = 'stock')       as stock,
     count(*) filter (where category = 'commodities') as commodities,
+    count(*) filter (where category = 'economic')    as economic,
     count(*) filter (where category = 'ipo')         as ipo
   from calendar_events
   group by date;

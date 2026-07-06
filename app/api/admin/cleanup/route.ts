@@ -6,7 +6,7 @@ import { logCronFailure } from "@/lib/log";
 // DELETE non-platform earnings and trending data, keep options/etf/ipo
 export async function POST(req: NextRequest) {
   const auth = req.headers.get("authorization");
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!process.env.CRON_SECRET || auth !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

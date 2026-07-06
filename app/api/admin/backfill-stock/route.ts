@@ -8,7 +8,7 @@ import { logCronFailure } from "@/lib/log";
 // Rate limit: 5 req/min (free tier) → 13s delay between calls
 export async function POST(req: NextRequest) {
   const auth = req.headers.get("authorization");
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!process.env.CRON_SECRET || auth !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

@@ -8,6 +8,8 @@
     { "path": "/api/cron/deribit",   "schedule": "0 0 * * 0"    },
     { "path": "/api/cron/coingecko", "schedule": "0 9 * * *"    },
     { "path": "/api/cron/assets-crypto", "schedule": "10 9 * * *" },
-    { "path": "/api/cron/assets-stock",  "schedule": "20 6 * * 1-5" }
+    { "path": "/api/cron/assets-stock",  "schedule": "20 6 * * 1-5" },
+    { "path": "/api/cron/assets-commodity", "schedule": "30 9 * * *" },
+    { "path": "/api/cron/assets-commodity-silver", "schedule": "35 9 * * *" }
   ]
 }

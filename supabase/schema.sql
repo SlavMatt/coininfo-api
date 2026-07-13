@@ -49,6 +49,21 @@ create index idx_cal_date_cat on public.calendar_events using btree (date, categ
 create index idx_cal_symbol   on public.calendar_events using btree (symbol, date);
 create index idx_cal_category on public.calendar_events using btree (category, date);
 
+create table public.asset_market_snapshots (
+  asset_key   text primary key,
+  symbol      text not null,
+  asset_class text not null check (asset_class = any (array['crypto', 'stock', 'index', 'commodity'])),
+  source      text not null,
+  market_data jsonb not null default '[]'::jsonb,
+  fields      jsonb not null default '{}'::jsonb,
+  source_urls jsonb not null default '{}'::jsonb,
+  as_of       timestamp with time zone not null default now(),
+  updated_at  timestamp with time zone default now()
+);
+
+create index idx_asset_market_snapshots_class
+  on public.asset_market_snapshots using btree (asset_class, symbol);
+
 -- Note: the ipo column always returns 0 — category='ipo' is not in the
 -- calendar_events CHECK constraint, so no rows can have that value.
 -- TODO: apply the following in Supabase SQL Editor (MCP has no write access):

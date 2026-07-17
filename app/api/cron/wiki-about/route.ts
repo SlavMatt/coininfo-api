@@ -18,6 +18,21 @@ function classify(assetKey: string): AssetClass {
   return ASSET_CLASS_BY_PREFIX.find((r) => r.test.test(assetKey))?.cls ?? "stock";
 }
 
+// Hard cap on the About text length, regardless of what Wikipedia returns.
+// The /page/summary endpoint only returns the lead paragraph (not the full
+// article), so this rarely trims anything in practice — but a few topics
+// have unusually long lead paragraphs, and this guarantees consistent
+// length across all 24 assets rather than relying on that being true.
+const MAX_ABOUT_CHARS = 500;
+
+function truncateAtSentence(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  const cut = text.slice(0, maxChars);
+  const lastPeriod = cut.lastIndexOf(". ");
+  if (lastPeriod > maxChars * 0.5) return cut.slice(0, lastPeriod + 1);
+  return cut.trimEnd() + "…";
+}
+
 async function fetchSummary(title: string): Promise<{ extract: string; pageUrl: string } | null> {
   const res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${title}`, {
     headers: { "User-Agent": "CoinInfoBot/1.0 (https://coininfo-tawny.vercel.app)" },
@@ -26,7 +41,7 @@ async function fetchSummary(title: string): Promise<{ extract: string; pageUrl: 
   const data = await res.json();
   if (!data.extract) return null;
   return {
-    extract: String(data.extract),
+    extract: truncateAtSentence(String(data.extract), MAX_ABOUT_CHARS),
     pageUrl: data.content_urls?.desktop?.page ?? `https://en.wikipedia.org/wiki/${title}`,
   };
 }

@@ -11,6 +11,6 @@
     { "path": "/api/cron/assets-stock",  "schedule": "20 6 * * 1-5" },
     { "path": "/api/cron/assets-commodity", "schedule": "30 9 * * *" },
     { "path": "/api/cron/assets-commodity-silver", "schedule": "35 9 * * *" },
-    { "path": "/api/cron/wiki-about", "schedule": "0 4 * * *" }
+    { "path": "/api/cron/wiki-about", "schedule": "0 4 * * 1" }
   ]
 }

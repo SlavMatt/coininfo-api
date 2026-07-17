@@ -3,10 +3,12 @@ import { db } from "@/lib/db";
 import {
   AssetSnapshotRow,
   FINNHUB_STOCK_SYMBOLS,
+  KR_STOCK_SYMBOLS,
   firstMetric,
   formatDate,
   formatNumber,
   jsonHeaders,
+  preserveAboutFields,
   usdCompact,
 } from "@/lib/asset-market";
 import { logCronFailure } from "@/lib/log";
@@ -46,20 +48,25 @@ export async function GET(req: NextRequest) {
 
     if (!profile?.ticker && marketCapMillions == null && pe == null && eps == null) continue;
 
-    const marketData = [
-      { k: "Market Cap", v: marketCapMillions != null ? usdCompact(Number(marketCapMillions) * 1_000_000) : "—" },
-      { k: "P/E Ratio", v: pe != null ? formatNumber(pe, 2) : "—" },
-      { k: "EPS (TTM)", v: eps != null ? `$${formatNumber(eps, 2)}` : "—" },
-      ...(profile?.finnhubIndustry ? [{ k: "Industry", v: String(profile.finnhubIndustry) }] : []),
-      ...(profile?.ipo ? [{ k: "IPO Date", v: formatDate(profile.ipo) }] : []),
-      { k: "Shares", v: shareMillions != null ? `${formatNumber(Number(shareMillions) * 1_000_000, 0)}` : "—" },
-      {
-        k: "52W Range",
-        v: high52 != null && low52 != null
-          ? `$${formatNumber(low52, 2)}–$${formatNumber(high52, 2)}`
-          : "—",
-      },
-    ];
+    // KR stocks keep a minimal card (Market Cap only) — see KR_STOCK_SYMBOLS.
+    const marketData = KR_STOCK_SYMBOLS.has(internalSymbol)
+      ? [
+          { k: "Market Cap", v: marketCapMillions != null ? usdCompact(Number(marketCapMillions) * 1_000_000) : "—" },
+        ]
+      : [
+          { k: "Market Cap", v: marketCapMillions != null ? usdCompact(Number(marketCapMillions) * 1_000_000) : "—" },
+          { k: "P/E Ratio", v: pe != null ? formatNumber(pe, 2) : "—" },
+          { k: "EPS (TTM)", v: eps != null ? `$${formatNumber(eps, 2)}` : "—" },
+          ...(profile?.finnhubIndustry ? [{ k: "Industry", v: String(profile.finnhubIndustry) }] : []),
+          ...(profile?.ipo ? [{ k: "IPO Date", v: formatDate(profile.ipo) }] : []),
+          { k: "Shares", v: shareMillions != null ? `${formatNumber(Number(shareMillions) * 1_000_000, 0)}` : "—" },
+          {
+            k: "52W Range",
+            v: high52 != null && low52 != null
+              ? `$${formatNumber(low52, 2)}–$${formatNumber(high52, 2)}`
+              : "—",
+          },
+        ];
 
     rows.push({
       asset_key: `${internalSymbol}-PERP`,
@@ -80,7 +87,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ upserted: 0, note: "no stock rows built" });
   }
 
-  const { error } = await db.from("asset_market_snapshots").upsert(rows, { onConflict: "asset_key" });
+  const mergedRows = await preserveAboutFields(db, rows);
+  const { error } = await db.from("asset_market_snapshots").upsert(mergedRows, { onConflict: "asset_key" });
   if (error) {
     logCronFailure("cron/assets-stock", "supabase upsert failed", error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { AssetSnapshotRow, formatNumber, jsonHeaders } from "@/lib/asset-market";
+import { AssetSnapshotRow, formatNumber, jsonHeaders, preserveAboutFields } from "@/lib/asset-market";
 import { logCronFailure } from "@/lib/log";
 
 export const maxDuration = 60;
@@ -53,7 +53,8 @@ export async function GET(req: NextRequest) {
     fields: {},
     source_urls: { alpha_vantage: "https://www.alphavantage.co/documentation/#commodities" },
   };
-  const { error } = await db.from("asset_market_snapshots").upsert(row, { onConflict: "asset_key" });
+  const [mergedRow] = await preserveAboutFields(db, [row]);
+  const { error } = await db.from("asset_market_snapshots").upsert(mergedRow, { onConflict: "asset_key" });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ upserted: 1, symbols: ["XAG"] }, { headers: jsonHeaders() });
 }

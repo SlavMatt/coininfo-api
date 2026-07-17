@@ -24,6 +24,12 @@ export const US_STOCK_SYMBOLS = [
   "ARM", "WDC", "STX",
 ];
 
+// KR stocks are quoted via their US OTC pink-sheet ticker rather than the
+// raw KRX symbol (e.g. "005930.KS") — Finnhub's free-tier profile/metric
+// endpoints have inconsistent coverage for foreign exchange suffixes, but
+// reliably support standard US OTC tickers. The dashboard already displays
+// "Ticker (OTC)" (SSNLF / HXSCL) alongside "Ticker (KRX)", so this makes the
+// live data source match what's already shown to users.
 export const FINNHUB_STOCK_SYMBOLS: Record<string, string> = {
   TSLA: "TSLA",
   MU: "MU",
@@ -41,9 +47,79 @@ export const FINNHUB_STOCK_SYMBOLS: Record<string, string> = {
   ARM: "ARM",
   WDC: "WDC",
   STX: "STX",
-  SAMSUNG: "005930.KS",
-  SKHYNIX: "000660.KS",
+  SAMSUNG: "SSNLF",
+  SKHYNIX: "HXSCL",
 };
+
+// KR stocks keep a deliberately minimal card (Market Cap · Sector · Currency
+// · Ticker KRX/OTC) — unlike US stocks they don't show P/E, EPS, or 52W
+// Range, since those aren't consistently comparable for OTC-quoted ADRs.
+// The stock cron checks this set to only merge Market Cap for these symbols.
+export const KR_STOCK_SYMBOLS = new Set(["SAMSUNG", "SKHYNIX"]);
+
+// Wikipedia REST API page titles (en.wikipedia.org/api/rest_v1/page/summary/{title})
+// used to source the "About" description for non-crypto assets. Crypto assets
+// continue to use CoinGecko's own description instead.
+export const WIKI_TITLES: Record<string, string> = {
+  // US Stock
+  "TSLA-PERP":    "Tesla,_Inc.",
+  "MU-PERP":      "Micron_Technology",
+  "AMD-PERP":     "Advanced_Micro_Devices",
+  "CRCL-PERP":    "Circle_(company)",
+  "INTC-PERP":    "Intel",
+  "SNDK-PERP":    "SanDisk",
+  "AAPL-PERP":    "Apple_Inc.",
+  "AMZN-PERP":    "Amazon_(company)",
+  "GOOGL-PERP":   "Alphabet_Inc.",
+  "META-PERP":    "Meta_Platforms",
+  "MSTR-PERP":    "MicroStrategy",
+  "MSFT-PERP":    "Microsoft",
+  "NVDA-PERP":    "Nvidia",
+  "SPCX-PERP":    "SpaceX",
+  "STX-PERP":     "Seagate_Technology",
+  "WDC-PERP":     "Western_Digital",
+  // KR Stock
+  "SAMSUNG-PERP": "Samsung_Electronics",
+  "SKHYNIX-PERP": "SK_Hynix",
+  // Indices
+  "SP500-PERP":   "S%26P_500",
+  "NDX100-PERP":  "Nasdaq-100",
+  // Commodities
+  "CL-PERP":      "West_Texas_Intermediate",
+  "BZ-PERP":      "Brent_Crude",
+  "XAU-PERP":     "Gold",
+  "XAG-PERP":     "Silver",
+};
+
+// Market-data crons overwrite the `fields` column wholesale on upsert. The
+// wiki-about cron writes `about` / `aboutSource` / `aboutUrl` into that same
+// column via a read-merge-write, so any market-data cron running afterwards
+// would silently wipe the description unless it re-merges those keys back
+// in first. Call this right before upserting `rows`.
+export async function preserveAboutFields<T extends { asset_key: string; fields: Record<string, unknown> }>(
+  db: { from: (table: string) => any },
+  rows: T[]
+): Promise<T[]> {
+  if (!rows.length) return rows;
+  const keys = rows.map((r) => r.asset_key);
+  const { data } = await db
+    .from("asset_market_snapshots")
+    .select("asset_key, fields")
+    .in("asset_key", keys);
+
+  const aboutByKey = new Map<string, Record<string, unknown>>();
+  for (const row of data ?? []) {
+    const f = row.fields ?? {};
+    if (f.about) {
+      aboutByKey.set(row.asset_key, { about: f.about, aboutSource: f.aboutSource, aboutUrl: f.aboutUrl });
+    }
+  }
+
+  return rows.map((row) => {
+    const preserved = aboutByKey.get(row.asset_key);
+    return preserved ? { ...row, fields: { ...row.fields, ...preserved } } : row;
+  });
+}
 
 export function jsonHeaders(cache = "public, s-maxage=300, stale-while-revalidate=600") {
   return {

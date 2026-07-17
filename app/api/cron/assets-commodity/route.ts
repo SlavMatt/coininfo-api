@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { AssetSnapshotRow, formatNumber, jsonHeaders } from "@/lib/asset-market";
+import { AssetSnapshotRow, formatNumber, jsonHeaders, preserveAboutFields } from "@/lib/asset-market";
 import { logCronFailure } from "@/lib/log";
 
 export const maxDuration = 60;
@@ -101,7 +101,8 @@ export async function GET(req: NextRequest) {
   if (failures.length) logCronFailure("cron/assets-commodity", `${failures.length} commodity fetch(es) failed`, failures);
   if (rows.length === 0) return NextResponse.json({ upserted: 0, failures }, { status: 502 });
 
-  const { error } = await db.from("asset_market_snapshots").upsert(rows, { onConflict: "asset_key" });
+  const mergedRows = await preserveAboutFields(db, rows);
+  const { error } = await db.from("asset_market_snapshots").upsert(mergedRows, { onConflict: "asset_key" });
   if (error) {
     logCronFailure("cron/assets-commodity", "supabase upsert failed", error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });

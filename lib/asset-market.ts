@@ -91,6 +91,47 @@ export const WIKI_TITLES: Record<string, string> = {
   "XAG-PERP":     "Silver",
 };
 
+// CoinGecko coin IDs for the About text of the 16 crypto pairs actually live
+// on DipCoin (verified via `dipcoin-cli market pairs`) — the frontend's
+// static ASSETS list only had 9 of these; LINK/AAVE/ZEC/TRUMP/PAXG/TRX/ADA
+// are live on the real exchange but missing from the demo data.
+export const CRYPTO_COINGECKO_IDS: Record<string, string> = {
+  "BTC-PERP":   "bitcoin",
+  "ETH-PERP":   "ethereum",
+  "SUI-PERP":   "sui",
+  "BNB-PERP":   "binancecoin",
+  "SOL-PERP":   "solana",
+  "XRP-PERP":   "ripple",
+  "HYPE-PERP":  "hyperliquid",
+  "LTC-PERP":   "litecoin",
+  "DOGE-PERP":  "dogecoin",
+  "LINK-PERP":  "chainlink",
+  "AAVE-PERP":  "aave",
+  "ZEC-PERP":   "zcash",
+  "TRUMP-PERP": "official-trump",
+  "PAXG-PERP":  "pax-gold",
+  "TRX-PERP":   "tron",
+  "ADA-PERP":   "cardano",
+};
+
+// Hard cap on the About text length, shared by every About source
+// (Wikipedia, CoinGecko). Applied uniformly to EN/KO/JA — CJK text is
+// denser per character, so 1000 chars of Korean/Japanese is if anything
+// more generous than 1000 chars of English, never a risk of under-truncating.
+export const MAX_ABOUT_CHARS = 1000;
+
+// Cut at the last sentence boundary within the cap. Handles both the Latin
+// ". " delimiter and the CJK full-width period "。" used by ja/ko/zh text.
+export function truncateAtSentence(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  const cut = text.slice(0, maxChars);
+  const lastLatin = cut.lastIndexOf(". ");
+  const lastCjk = cut.lastIndexOf("。");
+  const lastBoundary = Math.max(lastLatin, lastCjk);
+  if (lastBoundary > maxChars * 0.5) return cut.slice(0, lastBoundary + 1);
+  return cut.trimEnd() + "…";
+}
+
 // Keys written by cron/wiki-about that must survive other crons' upserts.
 const ABOUT_KEYS = [
   "about", "aboutSource", "aboutUrl",

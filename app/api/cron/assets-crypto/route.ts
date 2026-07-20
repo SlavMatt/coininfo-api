@@ -7,6 +7,7 @@ import {
   formatNumber,
   formatPercent,
   jsonHeaders,
+  preserveAboutFields,
   usdCompact,
 } from "@/lib/asset-market";
 import { logCronFailure } from "@/lib/log";
@@ -87,7 +88,8 @@ export async function GET(req: NextRequest) {
 
   if (rows.length === 0) return NextResponse.json({ upserted: 0 });
 
-  const { error } = await db.from("asset_market_snapshots").upsert(rows, { onConflict: "asset_key" });
+  const mergedRows = await preserveAboutFields(db, rows);
+  const { error } = await db.from("asset_market_snapshots").upsert(mergedRows, { onConflict: "asset_key" });
   if (error) {
     logCronFailure("cron/assets-crypto", "supabase upsert failed", error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });

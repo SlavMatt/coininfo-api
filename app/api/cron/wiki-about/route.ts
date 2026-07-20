@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { AssetClass, jsonHeaders, WIKI_TITLES } from "@/lib/asset-market";
+import { AssetClass, MAX_ABOUT_CHARS, jsonHeaders, truncateAtSentence, WIKI_TITLES } from "@/lib/asset-market";
 import { logCronFailure } from "@/lib/log";
 
 export const maxDuration = 60;
@@ -18,28 +18,6 @@ const ASSET_CLASS_BY_PREFIX: Array<{ test: RegExp; cls: AssetClass }> = [
 
 function classify(assetKey: string): AssetClass {
   return ASSET_CLASS_BY_PREFIX.find((r) => r.test.test(assetKey))?.cls ?? "stock";
-}
-
-// Hard cap on the About text length, regardless of what Wikipedia returns.
-// The /page/summary endpoint only returns the lead paragraph (not the full
-// article) — measured across all 24 current EN assets, the longest is Meta
-// Platforms at 691 chars, so 1000 gives headroom without truncating any of
-// them today, while still guarding against an unusually long lead paragraph
-// on a future asset. Applied uniformly to EN/KO/JA — CJK text is denser per
-// character, so 1000 chars of Korean/Japanese is if anything more generous
-// than 1000 chars of English, never a risk of under-truncating.
-const MAX_ABOUT_CHARS = 1000;
-
-// Cut at the last sentence boundary within the cap. Handles both the Latin
-// ". " delimiter and the CJK full-width period "。" used by ja/ko articles.
-function truncateAtSentence(text: string, maxChars: number): string {
-  if (text.length <= maxChars) return text;
-  const cut = text.slice(0, maxChars);
-  const lastLatin = cut.lastIndexOf(". ");
-  const lastCjk = cut.lastIndexOf("。");
-  const lastBoundary = Math.max(lastLatin, lastCjk);
-  if (lastBoundary > maxChars * 0.5) return cut.slice(0, lastBoundary + 1);
-  return cut.trimEnd() + "…";
 }
 
 type Summary = { extract: string; pageUrl: string };

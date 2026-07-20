@@ -20,10 +20,11 @@ function classify(assetKey: string): AssetClass {
 
 // Hard cap on the About text length, regardless of what Wikipedia returns.
 // The /page/summary endpoint only returns the lead paragraph (not the full
-// article), so this rarely trims anything in practice — but a few topics
-// have unusually long lead paragraphs, and this guarantees consistent
-// length across all 24 assets rather than relying on that being true.
-const MAX_ABOUT_CHARS = 500;
+// article) — measured across all 24 current assets, the longest is Meta
+// Platforms at 691 chars, so 1000 gives headroom without truncating any of
+// them today, while still guarding against an unusually long lead paragraph
+// on a future asset.
+const MAX_ABOUT_CHARS = 1000;
 
 function truncateAtSentence(text: string, maxChars: number): string {
   if (text.length <= maxChars) return text;

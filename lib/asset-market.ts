@@ -91,11 +91,18 @@ export const WIKI_TITLES: Record<string, string> = {
   "XAG-PERP":     "Silver",
 };
 
+// Keys written by cron/wiki-about that must survive other crons' upserts.
+const ABOUT_KEYS = [
+  "about", "aboutSource", "aboutUrl",
+  "about_ko", "aboutUrl_ko",
+  "about_ja", "aboutUrl_ja",
+] as const;
+
 // Market-data crons overwrite the `fields` column wholesale on upsert. The
-// wiki-about cron writes `about` / `aboutSource` / `aboutUrl` into that same
-// column via a read-merge-write, so any market-data cron running afterwards
-// would silently wipe the description unless it re-merges those keys back
-// in first. Call this right before upserting `rows`.
+// wiki-about cron writes about/about_ko/about_ja (+ source/url variants)
+// into that same column via a read-merge-write, so any market-data cron
+// running afterwards would silently wipe the descriptions unless it
+// re-merges those keys back in first. Call this right before upserting `rows`.
 export async function preserveAboutFields<T extends { asset_key: string; fields: Record<string, unknown> }>(
   db: { from: (table: string) => any },
   rows: T[]
@@ -111,7 +118,9 @@ export async function preserveAboutFields<T extends { asset_key: string; fields:
   for (const row of data ?? []) {
     const f = row.fields ?? {};
     if (f.about) {
-      aboutByKey.set(row.asset_key, { about: f.about, aboutSource: f.aboutSource, aboutUrl: f.aboutUrl });
+      const preserved: Record<string, unknown> = {};
+      for (const key of ABOUT_KEYS) if (f[key] !== undefined) preserved[key] = f[key];
+      aboutByKey.set(row.asset_key, preserved);
     }
   }
 
